@@ -3,51 +3,14 @@
  * Handles UI interactions, screen navigation, and workflow
  */
 
-const { electronAPI } = window;
-
-// Screen elements
-const screens = {
-  home: document.getElementById('homeScreen'),
-  link: document.getElementById('linkScreen'),
-  processing: document.getElementById('processingScreen'),
-  complete: document.getElementById('completeScreen')
-};
-
-// Button elements
-const uploadOption = document.getElementById('uploadOption');
-const linkOption = document.getElementById('linkOption');
-const downloadBtn = document.getElementById('downloadBtn');
-const cancelLinkBtn = document.getElementById('cancelLinkBtn');
-const saveLocationBtn = document.getElementById('saveLocationBtn');
-const startOverBtn = document.getElementById('startOverBtn');
-
-// Input elements
-const pdfUrlInput = document.getElementById('pdfUrlInput');
-
-// Progress elements
-const progressFill = document.getElementById('progressFill');
-const progressText = document.getElementById('progressText');
-const processingStatus = document.getElementById('processingStatus');
-
-// Result elements
-const conversionSummary = document.getElementById('conversionSummary');
-
 // State
 let convertedData = null;
 let currentFilePath = null;
 
-// Event listeners
-uploadOption.addEventListener('click', handleUploadOption);
-linkOption.addEventListener('click', handleLinkOption);
-downloadBtn.addEventListener('click', handleDownloadAndConvert);
-cancelLinkBtn.addEventListener('click', () => showScreen('home'));
-saveLocationBtn.addEventListener('click', handleSaveLocation);
-startOverBtn.addEventListener('click', handleStartOver);
-
-// Listen for download progress
-electronAPI.onDownloadProgress((progress) => {
-  updateProgress(progress, `Downloading file... ${progress}%`);
-});
+// Screen elements (will be initialized after DOM loads)
+let screens = {};
+let uploadOption, linkOption, downloadBtn, cancelLinkBtn, saveLocationBtn, startOverBtn;
+let pdfUrlInput, progressFill, progressText, processingStatus, conversionSummary;
 
 /**
  * Screen navigation
@@ -62,7 +25,7 @@ function showScreen(screenName) {
  */
 async function handleUploadOption() {
   try {
-    const filePath = await electronAPI.selectDAHFile();
+    const filePath = await window.electronAPI.selectDAHFile();
 
     if (filePath) {
       currentFilePath = filePath;
@@ -97,7 +60,7 @@ async function handleDownloadAndConvert() {
     showScreen('processing');
     updateProgress(0, 'Starting download...');
 
-    const result = await electronAPI.downloadPDF(url);
+    const result = await window.electronAPI.downloadPDF(url);
 
     if (result.success) {
       currentFilePath = result.filePath;
@@ -122,7 +85,7 @@ async function processFile(filePath) {
     await delay(500);
     updateProgress(50, 'Parsing DAH data...');
 
-    const result = await electronAPI.convertDAHFile(filePath);
+    const result = await window.electronAPI.convertDAHFile(filePath);
 
     if (result.success) {
       convertedData = result.data;
@@ -172,7 +135,7 @@ async function handleSaveLocation() {
   }
 
   try {
-    const result = await electronAPI.saveJSONFile(convertedData);
+    const result = await window.electronAPI.saveJSONFile(convertedData);
 
     if (result.success) {
       alert(`File saved successfully to:\n${result.path}`);
@@ -275,6 +238,48 @@ function updateLogo() {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
+  // Initialize screen elements
+  screens = {
+    home: document.getElementById('homeScreen'),
+    link: document.getElementById('linkScreen'),
+    processing: document.getElementById('processingScreen'),
+    complete: document.getElementById('completeScreen')
+  };
+
+  // Initialize button elements
+  uploadOption = document.getElementById('uploadOption');
+  linkOption = document.getElementById('linkOption');
+  downloadBtn = document.getElementById('downloadBtn');
+  cancelLinkBtn = document.getElementById('cancelLinkBtn');
+  saveLocationBtn = document.getElementById('saveLocationBtn');
+  startOverBtn = document.getElementById('startOverBtn');
+
+  // Initialize input elements
+  pdfUrlInput = document.getElementById('pdfUrlInput');
+
+  // Initialize progress elements
+  progressFill = document.getElementById('progressFill');
+  progressText = document.getElementById('progressText');
+  processingStatus = document.getElementById('processingStatus');
+
+  // Initialize result elements
+  conversionSummary = document.getElementById('conversionSummary');
+
+  // Set up event listeners
+  uploadOption.addEventListener('click', handleUploadOption);
+  linkOption.addEventListener('click', handleLinkOption);
+
+  downloadBtn.addEventListener('click', handleDownloadAndConvert);
+  cancelLinkBtn.addEventListener('click', () => showScreen('home'));
+  saveLocationBtn.addEventListener('click', handleSaveLocation);
+  startOverBtn.addEventListener('click', handleStartOver);
+
+  // Listen for download progress
+  window.electronAPI.onDownloadProgress((progress) => {
+    updateProgress(progress, `Downloading file... ${progress}%`);
+  });
+
+  // Initialize UI
   showScreen('home');
   updateLogo();
 });

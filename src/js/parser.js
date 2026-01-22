@@ -1,355 +1,266 @@
 /**
  * DAH File Parser
- * Parses Designated Airspace Handbook files from Air Services Australia
- *
- * Note: This parser is designed to be flexible and handle various DAH formats.
- * Once a sample file is provided, this can be refined for the specific format.
+ * Parses Designated Airspace Handbook PDF files from Air Services Australia
  */
+
+const pdf = require('pdf-parse');
 
 /**
  * Parse a DAH file content and extract airspace data
- * @param {string} fileContent - The content of the DAH file
+ * @param {string|Buffer} fileContent - The content of the DAH file
  * @returns {Object} Parsed airspace data
  */
-function parseDAHFile(fileContent) {
+async function parseDAHFile(fileContent) {
   try {
     // Initialize the parsed data structure
     const parsedData = {
       airspaces: [],
-      positions: [],
-      airports: [],
       metadata: {
         parseDate: new Date().toISOString(),
         source: 'Air Services Australia DAH'
       }
     };
 
-    // Detect the file format
-    const format = detectFileFormat(fileContent);
+    let textContent = fileContent;
 
-    switch (format) {
-      case 'csv':
-        return parseCSVFormat(fileContent, parsedData);
-      case 'structured_text':
-        return parseStructuredText(fileContent, parsedData);
-      case 'json':
-        return parseJSONFormat(fileContent, parsedData);
-      default:
-        return parseGenericFormat(fileContent, parsedData);
+    // If it's a Buffer (PDF file), extract text
+    if (Buffer.isBuffer(fileContent)) {
+      const data = await pdf(fileContent);
+      textContent = data.text;
     }
+
+    // Parse the text content
+    const airspaces = parseAirspaceText(textContent);
+    parsedData.airspaces = airspaces;
+
+    return parsedData;
   } catch (error) {
     throw new Error(`Failed to parse DAH file: ${error.message}`);
   }
 }
 
 /**
- * Detect the format of the DAH file
- * @param {string} content - File content
- * @returns {string} Format type
+ * Parse airspace text content
  */
-function detectFileFormat(content) {
-  // Try to detect JSON
-  if (content.trim().startsWith('{') || content.trim().startsWith('[')) {
-    try {
-      JSON.parse(content);
-      return 'json';
-    } catch (e) {
-      // Not valid JSON
-    }
-  }
+function parseAirspaceText(text) {
+  const airspaces = [];
+  const lines = text.split('\n').map(l => l.trim());
 
-  // Check for CSV (comma-separated with headers)
-  const lines = content.split('\n');
-  if (lines.length > 1 && lines[0].includes(',')) {
-    const firstLine = lines[0].toLowerCase();
-    if (firstLine.includes('airspace') || firstLine.includes('latitude') || firstLine.includes('name')) {
-      return 'csv';
-    }
-  }
-
-  // Check for structured text format
-  if (content.includes('AIRSPACE') || content.includes('Airspace') ||
-      content.includes('UPPER LIMIT') || content.includes('LOWER LIMIT')) {
-    return 'structured_text';
-  }
-
-  return 'generic';
-}
-
-/**
- * Parse CSV format DAH file
- * Expected columns: Airspace ID, Sequence Number, Airspace Name, Conditional Status,
- *                   Boundary Via, Latitude, Longitude, Upper Limit, Lower Limit, etc.
- */
-function parseCSVFormat(content, parsedData) {
-  const lines = content.split('\n').filter(line => line.trim());
-
-  if (lines.length < 2) {
-    throw new Error('CSV file must have headers and at least one data row');
-  }
-
-  // Parse headers
-  const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-
-  // Map common column variations
-  const columnMap = mapColumnNames(headers);
-
-  // Parse data rows
-  for (let i = 1; i < lines.length; i++) {
-    const values = parseCSVLine(lines[i]);
-    if (values.length !== headers.length) continue;
-
-    const airspace = {};
-    headers.forEach((header, index) => {
-      airspace[header] = values[index].trim();
-    });
-
-    // Create structured airspace object
-    const structuredAirspace = {
-      id: airspace[columnMap.id] || `AIRSPACE_${i}`,
-      name: airspace[columnMap.name] || 'Unknown',
-      type: airspace[columnMap.type] || 'UNKNOWN',
-      boundaries: [],
-      upperLimit: airspace[columnMap.upperLimit] || 'UNL',
-      lowerLimit: airspace[columnMap.lowerLimit] || 'GND',
-      conditional: airspace[columnMap.conditional] || false
-    };
-
-    // Add coordinate if present
-    if (airspace[columnMap.latitude] && airspace[columnMap.longitude]) {
-      structuredAirspace.boundaries.push({
-        latitude: parseCoordinate(airspace[columnMap.latitude]),
-        longitude: parseCoordinate(airspace[columnMap.longitude]),
-        sequence: parseInt(airspace[columnMap.sequence]) || 0
-      });
-    }
-
-    parsedData.airspaces.push(structuredAirspace);
-  }
-
-  // Group by airspace ID and merge boundaries
-  parsedData.airspaces = mergeAirspaceBoundaries(parsedData.airspaces);
-
-  return parsedData;
-}
-
-/**
- * Parse structured text format (common in PDF extracts)
- */
-function parseStructuredText(content, parsedData) {
-  const lines = content.split('\n');
   let currentAirspace = null;
+  let readingLateralLimits = false;
+  let readingVerticalLimits = false;
 
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line) continue;
 
-    // Look for airspace name/ID patterns
-    if (trimmed.match(/^[A-Z0-9-]+\s+[A-Z]/)) {
-      // Start of new airspace
-      if (currentAirspace) {
-        parsedData.airspaces.push(currentAirspace);
+    // Detect new airspace by title pattern (e.g., "YBBB-YMMM/MELBOURNE FIR CTA A1")
+    const titleMatch = line.match(/^([A-Z]{4}(?:-[A-Z]{4})?(?:\/[A-Z]{4})?)\/(.+?)(?:\s+CTA|CTR|TMA|CLASS)?\s*([A-Z]?\d+)?$/);
+    if (titleMatch) {
+      // Save previous airspace
+      if (currentAirspace && currentAirspace.boundaries.length > 0) {
+        airspaces.push(currentAirspace);
       }
+
+      // Start new airspace
+      const locations = titleMatch[1].split(/[-\/]/).filter(l => l.length === 4);
+      const name = titleMatch[2].trim();
+      const suffix = titleMatch[3] || '';
+
       currentAirspace = {
-        id: extractAirspaceId(trimmed),
-        name: extractAirspaceName(trimmed),
+        id: `${titleMatch[1]}/${name} ${suffix}`.trim(),
+        name: `${name} ${suffix}`.trim(),
+        locations: locations,
         boundaries: [],
         upperLimit: 'UNL',
-        lowerLimit: 'GND'
+        lowerLimit: 'GND',
+        controllingAuthority: null,
+        frequencies: [],
+        hoursOfOperation: null
       };
+
+      readingLateralLimits = false;
+      readingVerticalLimits = false;
+      continue;
     }
 
-    // Look for altitude limits
-    if (currentAirspace) {
-      const upperMatch = trimmed.match(/UPPER[:\s]+([^\s]+)/i);
-      const lowerMatch = trimmed.match(/LOWER[:\s]+([^\s]+)/i);
+    if (!currentAirspace) continue;
 
-      if (upperMatch) currentAirspace.upperLimit = upperMatch[1];
-      if (lowerMatch) currentAirspace.lowerLimit = lowerMatch[1];
+    // Detect LATERAL LIMITS section
+    if (line.match(/^LATERAL\s+LIMITS:/i)) {
+      readingLateralLimits = true;
+      readingVerticalLimits = false;
 
-      // Look for coordinates
-      const coordMatch = extractCoordinates(trimmed);
-      if (coordMatch) {
-        currentAirspace.boundaries.push(coordMatch);
+      // Extract coordinates from the same line if present
+      const coordsOnSameLine = line.replace(/^LATERAL\s+LIMITS:\s*/i, '').trim();
+      if (coordsOnSameLine) {
+        extractCoordinatesFromLine(coordsOnSameLine, currentAirspace);
+      }
+      continue;
+    }
+
+    // Detect VERTICAL LIMITS section
+    if (line.match(/^VERTICAL\s+LIMITS:/i)) {
+      readingLateralLimits = false;
+      readingVerticalLimits = true;
+
+      // Extract limits from the same line
+      const limitsText = line.replace(/^VERTICAL\s+LIMITS:\s*/i, '').trim();
+      extractVerticalLimits(limitsText, currentAirspace);
+      continue;
+    }
+
+    // Detect HOURS OF ACTIVATION
+    if (line.match(/^HOURS?\s+OF\s+ACTIVATION:/i)) {
+      const hours = line.replace(/^HOURS?\s+OF\s+ACTIVATION:\s*/i, '').trim();
+      currentAirspace.hoursOfOperation = hours;
+      readingLateralLimits = false;
+      readingVerticalLimits = false;
+      continue;
+    }
+
+    // Detect CONTROLLING AUTHORITY
+    if (line.match(/^CONTROLLING\s+AUTHORITY:/i)) {
+      const authority = line.replace(/^CONTROLLING\s+AUTHORITY:\s*/i, '').trim();
+      currentAirspace.controllingAuthority = authority;
+      readingLateralLimits = false;
+      readingVerticalLimits = false;
+      continue;
+    }
+
+    // If we're reading lateral limits, extract coordinates
+    if (readingLateralLimits) {
+      extractCoordinatesFromLine(line, currentAirspace);
+    }
+
+    // If we're reading vertical limits
+    if (readingVerticalLimits) {
+      extractVerticalLimits(line, currentAirspace);
+    }
+  }
+
+  // Save last airspace
+  if (currentAirspace && currentAirspace.boundaries.length > 0) {
+    airspaces.push(currentAirspace);
+  }
+
+  return airspaces;
+}
+
+/**
+ * Extract coordinates from a line of text
+ */
+function extractCoordinatesFromLine(line, airspace) {
+  // Pattern for DMS coordinates: DDMMSSS DDDMMSSS or DD°MM'SS"D DDD°MM'SS"D
+  // Examples: "3322225 14822227E", "332°22'25" 148°22'27"E"
+
+  // First try format: DDMMSSS DDDMMSSE (like "3322225 14822227E")
+  const pattern1 = /(\d{7})([NS])?\s+(\d{8})([EW])/g;
+  let matches = [...line.matchAll(pattern1)];
+
+  if (matches.length > 0) {
+    matches.forEach(match => {
+      const lat = parseDMSCoordinate(match[1], match[2] || 'S'); // Default to S for southern hemisphere
+      const lon = parseDMSCoordinate(match[3], match[4]);
+
+      if (lat !== null && lon !== null) {
+        airspace.boundaries.push({ latitude: lat, longitude: lon });
+      }
+    });
+    return;
+  }
+
+  // Try format with degrees/minutes/seconds symbols
+  const pattern2 = /(\d+)°(\d+)'(\d+)"?([NS])\s+(\d+)°(\d+)'(\d+)"?([EW])/g;
+  matches = [...line.matchAll(pattern2)];
+
+  if (matches.length > 0) {
+    matches.forEach(match => {
+      const lat = dmsToDecimal(parseInt(match[1]), parseInt(match[2]), parseInt(match[3]), match[4]);
+      const lon = dmsToDecimal(parseInt(match[5]), parseInt(match[6]), parseInt(match[7]), match[8]);
+
+      airspace.boundaries.push({ latitude: lat, longitude: lon });
+    });
+    return;
+  }
+
+  // Try simpler pattern: DDMMSSS (CBDME format in the image)
+  const pattern3 = /(\d{7})/g;
+  const coords = [...line.matchAll(pattern3)];
+
+  if (coords.length >= 2) {
+    for (let i = 0; i < coords.length - 1; i += 2) {
+      const lat = parseDMSCoordinate(coords[i][1], 'S');
+      const lon = parseDMSCoordinate(coords[i + 1][1], 'E');
+
+      if (lat !== null && lon !== null) {
+        airspace.boundaries.push({ latitude: lat, longitude: lon });
       }
     }
   }
-
-  if (currentAirspace) {
-    parsedData.airspaces.push(currentAirspace);
-  }
-
-  return parsedData;
 }
 
 /**
- * Parse JSON format DAH file
+ * Parse DMS coordinate from format DDMMSSS
  */
-function parseJSONFormat(content, parsedData) {
-  const jsonData = JSON.parse(content);
+function parseDMSCoordinate(dmsStr, direction) {
+  // Format: DDMMSSS for lat or DDDMMSSS for lon
+  const str = dmsStr.replace(/[^\d]/g, '');
 
-  // Handle different JSON structures
-  if (Array.isArray(jsonData)) {
-    parsedData.airspaces = jsonData;
-  } else if (jsonData.airspaces) {
-    parsedData.airspaces = jsonData.airspaces;
+  let degrees, minutes, seconds;
+
+  if (str.length === 7) {
+    // Latitude: DDMMSSS
+    degrees = parseInt(str.substring(0, 2));
+    minutes = parseInt(str.substring(2, 4));
+    seconds = parseInt(str.substring(4, 7)) / 10; // Last 3 digits are tenths of seconds
+  } else if (str.length === 8) {
+    // Longitude: DDDMMSSS
+    degrees = parseInt(str.substring(0, 3));
+    minutes = parseInt(str.substring(3, 5));
+    seconds = parseInt(str.substring(5, 8)) / 10;
   } else {
-    parsedData.airspaces = [jsonData];
+    return null;
   }
 
-  return parsedData;
+  return dmsToDecimal(degrees, minutes, seconds, direction);
 }
 
 /**
- * Generic parser for unknown formats
+ * Convert DMS to decimal degrees
  */
-function parseGenericFormat(content, parsedData) {
-  // Try to extract any coordinate pairs
-  const coordPattern = /(-?\d+\.?\d*)[°\s,]+([NSEW]?)\s*(-?\d+\.?\d*)[°\s,]+([NSEW]?)/gi;
-  const matches = content.matchAll(coordPattern);
+function dmsToDecimal(degrees, minutes, seconds, direction) {
+  let decimal = degrees + minutes / 60 + seconds / 3600;
 
-  const boundaries = [];
-  for (const match of matches) {
-    boundaries.push({
-      latitude: parseCoordinate(match[1] + match[2]),
-      longitude: parseCoordinate(match[3] + match[4])
-    });
+  if (direction === 'S' || direction === 'W') {
+    decimal *= -1;
   }
 
-  if (boundaries.length > 0) {
-    parsedData.airspaces.push({
-      id: 'EXTRACTED_AIRSPACE',
-      name: 'Extracted from DAH',
-      boundaries: boundaries,
-      upperLimit: 'UNL',
-      lowerLimit: 'GND'
-    });
+  return decimal;
+}
+
+/**
+ * Extract vertical limits
+ */
+function extractVerticalLimits(text, airspace) {
+  // Pattern: "FL180 - FL245" or "SFC - 1500" etc.
+  const rangeMatch = text.match(/(SFC|GND|FL\d+|\d+)\s*-\s*(UNL|FL\d+|\d+)/i);
+
+  if (rangeMatch) {
+    airspace.lowerLimit = rangeMatch[1];
+    airspace.upperLimit = rangeMatch[2];
+    return;
   }
 
-  return parsedData;
-}
-
-// Helper functions
-
-function mapColumnNames(headers) {
-  const map = {
-    id: null,
-    name: null,
-    type: null,
-    latitude: null,
-    longitude: null,
-    upperLimit: null,
-    lowerLimit: null,
-    conditional: null,
-    sequence: null
-  };
-
-  headers.forEach(header => {
-    const lower = header.toLowerCase();
-    if (lower.includes('airspace') && lower.includes('id')) map.id = header;
-    else if (lower.includes('airspace') && lower.includes('name')) map.name = header;
-    else if (lower === 'name' && !map.name) map.name = header;
-    else if (lower.includes('type')) map.type = header;
-    else if (lower.includes('lat')) map.latitude = header;
-    else if (lower.includes('lon')) map.longitude = header;
-    else if (lower.includes('upper')) map.upperLimit = header;
-    else if (lower.includes('lower')) map.lowerLimit = header;
-    else if (lower.includes('conditional')) map.conditional = header;
-    else if (lower.includes('sequence')) map.sequence = header;
-  });
-
-  return map;
-}
-
-function parseCSVLine(line) {
-  const result = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (char === ',' && !inQuotes) {
-      result.push(current);
-      current = '';
+  // Single limit
+  if (text.match(/^(FL\d+|UNL|SFC|GND)/i)) {
+    // Determine if it's upper or lower based on context
+    if (text.match(/^(SFC|GND)/i)) {
+      airspace.lowerLimit = text;
     } else {
-      current += char;
+      airspace.upperLimit = text;
     }
   }
-  result.push(current);
-
-  return result;
-}
-
-function parseCoordinate(coord) {
-  if (typeof coord === 'number') return coord;
-
-  const str = coord.toString().trim();
-
-  // Handle decimal degrees
-  const decimal = parseFloat(str);
-  if (!isNaN(decimal)) return decimal;
-
-  // Handle DMS format (e.g., "33°52'12"S")
-  const dmsMatch = str.match(/(\d+)[°\s]+(\d+)['\s]+(\d+\.?\d*)["\s]*([NSEW])/i);
-  if (dmsMatch) {
-    const degrees = parseInt(dmsMatch[1]);
-    const minutes = parseInt(dmsMatch[2]);
-    const seconds = parseFloat(dmsMatch[3]);
-    const direction = dmsMatch[4].toUpperCase();
-
-    let decimal = degrees + minutes / 60 + seconds / 3600;
-    if (direction === 'S' || direction === 'W') decimal *= -1;
-
-    return decimal;
-  }
-
-  return 0;
-}
-
-function extractAirspaceId(line) {
-  const match = line.match(/^([A-Z0-9-]+)/);
-  return match ? match[1] : 'UNKNOWN';
-}
-
-function extractAirspaceName(line) {
-  const match = line.match(/^[A-Z0-9-]+\s+(.+?)(\s+UPPER|\s+LOWER|$)/i);
-  return match ? match[1].trim() : 'Unknown Airspace';
-}
-
-function extractCoordinates(line) {
-  const pattern = /(-?\d+\.?\d*)[°\s]+([NS])\s+(-?\d+\.?\d*)[°\s]+([EW])/i;
-  const match = line.match(pattern);
-
-  if (match) {
-    return {
-      latitude: parseCoordinate(match[1] + match[2]),
-      longitude: parseCoordinate(match[3] + match[4])
-    };
-  }
-  return null;
-}
-
-function mergeAirspaceBoundaries(airspaces) {
-  const grouped = {};
-
-  airspaces.forEach(airspace => {
-    if (!grouped[airspace.id]) {
-      grouped[airspace.id] = {
-        ...airspace,
-        boundaries: []
-      };
-    }
-    grouped[airspace.id].boundaries.push(...airspace.boundaries);
-  });
-
-  // Sort boundaries by sequence if available
-  Object.values(grouped).forEach(airspace => {
-    airspace.boundaries.sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
-  });
-
-  return Object.values(grouped);
 }
 
 module.exports = {

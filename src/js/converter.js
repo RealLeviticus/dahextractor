@@ -5,8 +5,10 @@
  * VATGlasses format structure:
  * {
  *   "airspace": [...],
- *   "positions": [...],
- *   "airports": [...]
+ *   "groups": {...},
+ *   "positions": {...},
+ *   "callsigns": {...},
+ *   "airports": {...}
  * }
  */
 
@@ -18,28 +20,52 @@
 function convertToVATGlasses(parsedData) {
   const vatglassesData = {
     airspace: [],
-    positions: [],
-    airports: [],
-    metadata: {
-      generatedAt: new Date().toISOString(),
-      source: parsedData.metadata?.source || 'DAH File',
-      version: '1.0'
-    }
+    groups: {},
+    positions: {},
+    callsigns: {
+      "DEL": { "": "Clearance Delivery" },
+      "GND": { "": "Ground" },
+      "TWR": { "": "Tower" },
+      "APP": { "": "Approach" },
+      "DEP": { "": "Departure" }
+    },
+    airports: {}
   };
 
   // Convert airspaces
   if (parsedData.airspaces && parsedData.airspaces.length > 0) {
-    vatglassesData.airspace = parsedData.airspaces.map(convertAirspace);
-  }
+    parsedData.airspaces.forEach(airspace => {
+      const converted = convertAirspace(airspace);
+      if (converted) {
+        vatglassesData.airspace.push(converted);
 
-  // Convert positions
-  if (parsedData.positions && parsedData.positions.length > 0) {
-    vatglassesData.positions = parsedData.positions.map(convertPosition);
-  }
+        // Add group if specified
+        if (airspace.locations && airspace.locations.length > 0) {
+          airspace.locations.forEach(location => {
+            if (!vatglassesData.groups[location]) {
+              vatglassesData.groups[location] = {
+                name: extractLocationName(location),
+                colour: "#ffffff"
+              };
+            }
+          });
+        }
 
-  // Convert airports
-  if (parsedData.airports && parsedData.airports.length > 0) {
-    vatglassesData.airports = parsedData.airports.map(convertAirport);
+        // Add position if controlling authority exists
+        if (airspace.controllingAuthority && airspace.frequencies && airspace.frequencies.length > 0) {
+          const posId = extractPositionId(airspace.id, airspace.name);
+          if (posId && !vatglassesData.positions[posId]) {
+            vatglassesData.positions[posId] = {
+              colours: [{ hex: "#56de37" }],
+              pre: [determinePositionPrefix(airspace.locations, posId)],
+              type: "FSS",
+              frequency: airspace.frequencies[0].toFixed(3),
+              callsign: airspace.controllingAuthority
+            };
+          }
+        }
+      }
+    });
   }
 
   return vatglassesData;
@@ -49,288 +75,189 @@ function convertToVATGlasses(parsedData) {
  * Convert a single airspace to VATGlasses format
  */
 function convertAirspace(airspace) {
+  if (!airspace.boundaries || airspace.boundaries.length === 0) {
+    return null;
+  }
+
   const vatAirspace = {
-    id: airspace.id || generateId('AIRSPACE'),
-    name: airspace.name || 'Unknown Airspace',
-    type: normalizeAirspaceType(airspace.type),
-    boundaries: []
+    id: airspace.name || airspace.id || 'Unknown',
+    owner: []
   };
 
-  // Add altitude information
-  if (airspace.upperLimit) {
-    vatAirspace.ceiling = normalizeAltitude(airspace.upperLimit);
+  // Add group (location)
+  if (airspace.locations && airspace.locations.length > 0) {
+    vatAirspace.group = airspace.locations[0];
   }
 
-  if (airspace.lowerLimit) {
-    vatAirspace.floor = normalizeAltitude(airspace.lowerLimit);
+  // Add owner (position controlling this airspace)
+  const posId = extractPositionId(airspace.id, airspace.name);
+  if (posId) {
+    vatAirspace.owner.push(posId);
   }
 
-  // Convert boundaries
-  if (airspace.boundaries && airspace.boundaries.length > 0) {
-    vatAirspace.boundaries = airspace.boundaries.map(boundary => ({
-      lat: normalizeCoordinate(boundary.latitude),
-      lon: normalizeCoordinate(boundary.longitude)
-    }));
+  // Convert boundaries to sectors
+  vatAirspace.sectors = [];
+
+  const sector = {
+    points: airspace.boundaries.map(boundary =>
+      formatCoordinate(boundary.latitude, boundary.longitude)
+    )
+  };
+
+  // Add altitude limits
+  if (airspace.upperLimit && airspace.upperLimit !== 'UNL') {
+    const ceiling = parseAltitude(airspace.upperLimit);
+    if (ceiling !== null) {
+      sector.max = ceiling;
+    }
   }
 
-  // Add additional properties if present
-  if (airspace.conditional !== undefined) {
-    vatAirspace.conditional = airspace.conditional;
+  if (airspace.lowerLimit && airspace.lowerLimit !== 'GND' && airspace.lowerLimit !== 'SFC') {
+    const floor = parseAltitude(airspace.lowerLimit);
+    if (floor !== null) {
+      sector.min = floor;
+    }
   }
 
-  if (airspace.class) {
-    vatAirspace.class = airspace.class;
-  }
-
-  if (airspace.frequency) {
-    vatAirspace.frequency = airspace.frequency;
-  }
+  vatAirspace.sectors.push(sector);
 
   return vatAirspace;
 }
 
 /**
- * Convert a position to VATGlasses format
+ * Format coordinate to VATGlasses format (DDMMSS without decimal point)
  */
-function convertPosition(position) {
-  const vatPosition = {
-    id: position.id || generateId('POS'),
-    callsign: position.callsign || position.name,
-    frequency: position.frequency || '000.000',
-    name: position.name || 'Unknown Position'
+function formatCoordinate(lat, lon) {
+  const formatDMS = (decimal, isLat) => {
+    const absolute = Math.abs(decimal);
+    const degrees = Math.floor(absolute);
+    const minutesDecimal = (absolute - degrees) * 60;
+    const minutes = Math.floor(minutesDecimal);
+    const seconds = Math.floor((minutesDecimal - minutes) * 60);
+
+    // Format as DDMMSS or DDDMMSS
+    const degStr = isLat
+      ? degrees.toString().padStart(2, '0')
+      : degrees.toString().padStart(3, '0');
+    const minStr = minutes.toString().padStart(2, '0');
+    const secStr = seconds.toString().padStart(2, '0');
+
+    // Add sign
+    const sign = decimal < 0 ? '-' : '';
+
+    return sign + degStr + minStr + secStr;
   };
 
-  // Add position type (e.g., CTR, APP, TWR, GND, DEL)
-  if (position.type) {
-    vatPosition.type = position.type.toUpperCase();
-  }
-
-  // Add coordinates if present
-  if (position.latitude && position.longitude) {
-    vatPosition.coordinates = {
-      lat: normalizeCoordinate(position.latitude),
-      lon: normalizeCoordinate(position.longitude)
-    };
-  }
-
-  // Add airspace ownership if present
-  if (position.airspace) {
-    vatPosition.airspace = Array.isArray(position.airspace)
-      ? position.airspace
-      : [position.airspace];
-  }
-
-  return vatPosition;
+  return [formatDMS(lat, true), formatDMS(lon, false)];
 }
 
 /**
- * Convert an airport to VATGlasses format
+ * Parse altitude to flight level number
  */
-function convertAirport(airport) {
-  const vatAirport = {
-    icao: airport.icao || airport.code,
-    name: airport.name || 'Unknown Airport',
-    coordinates: {
-      lat: normalizeCoordinate(airport.latitude),
-      lon: normalizeCoordinate(airport.longitude)
-    }
-  };
+function parseAltitude(altStr) {
+  if (!altStr) return null;
 
-  // Add elevation if present
-  if (airport.elevation !== undefined) {
-    vatAirport.elevation = airport.elevation;
-  }
-
-  // Add runways if present
-  if (airport.runways) {
-    vatAirport.runways = airport.runways;
-  }
-
-  // Add ownership (positions that control this airport)
-  if (airport.positions) {
-    vatAirport.ownership = Array.isArray(airport.positions)
-      ? airport.positions
-      : [airport.positions];
-  }
-
-  return vatAirport;
-}
-
-// Helper functions
-
-/**
- * Normalize airspace type to standard codes
- */
-function normalizeAirspaceType(type) {
-  if (!type) return 'OTHER';
-
-  const typeMap = {
-    'CLASS A': 'A',
-    'CLASS B': 'B',
-    'CLASS C': 'C',
-    'CLASS D': 'D',
-    'CLASS E': 'E',
-    'CLASS F': 'F',
-    'CLASS G': 'G',
-    'CONTROL ZONE': 'CTR',
-    'CTR': 'CTR',
-    'CONTROL AREA': 'CTA',
-    'CTA': 'CTA',
-    'TERMINAL CONTROL AREA': 'TMA',
-    'TMA': 'TMA',
-    'RESTRICTED': 'R',
-    'PROHIBITED': 'P',
-    'DANGER': 'D',
-    'MILITARY': 'M'
-  };
-
-  const upperType = type.toUpperCase().trim();
-  return typeMap[upperType] || upperType;
-}
-
-/**
- * Normalize altitude to standard format
- * @param {string|number} altitude - Altitude string or number
- * @returns {Object} Normalized altitude object
- */
-function normalizeAltitude(altitude) {
-  if (typeof altitude === 'object') return altitude;
-
-  const altStr = altitude.toString().toUpperCase().trim();
+  const str = altStr.toString().toUpperCase().trim();
 
   // Handle unlimited
-  if (altStr === 'UNL' || altStr === 'UNLIMITED') {
-    return {
-      value: 999,
-      unit: 'FL',
-      reference: 'STD'
-    };
+  if (str === 'UNL' || str === 'UNLIMITED') {
+    return 999;
   }
 
   // Handle ground level
-  if (altStr === 'GND' || altStr === 'GROUND' || altStr === 'SFC') {
-    return {
-      value: 0,
-      unit: 'FT',
-      reference: 'AGL'
-    };
+  if (str === 'GND' || str === 'GROUND' || str === 'SFC') {
+    return null; // Don't set min for ground
   }
 
   // Parse flight level (e.g., "FL350", "F350")
-  const flMatch = altStr.match(/F?L?(\d+)/);
-  if (flMatch && parseInt(flMatch[1]) > 180) {
-    return {
-      value: parseInt(flMatch[1]),
-      unit: 'FL',
-      reference: 'STD'
-    };
+  const flMatch = str.match(/F?L?(\d+)/);
+  if (flMatch) {
+    return parseInt(flMatch[1]);
   }
 
-  // Parse feet (e.g., "5000FT", "5000'", "5000 AMSL")
-  const ftMatch = altStr.match(/(\d+)\s*(FT|'|FEET|AMSL|AGL)?/);
+  // Parse feet and convert to flight level (e.g., "24500FT" -> FL245)
+  const ftMatch = str.match(/(\d+)\s*(FT|'|FEET)?/);
   if (ftMatch) {
-    const isAGL = altStr.includes('AGL') || altStr.includes('ABOVE GROUND');
-    return {
-      value: parseInt(ftMatch[1]),
-      unit: 'FT',
-      reference: isAGL ? 'AGL' : 'AMSL'
-    };
+    const feet = parseInt(ftMatch[1]);
+    // Convert feet to flight level (divide by 100)
+    return Math.floor(feet / 100);
   }
 
-  // Default
-  return {
-    value: 0,
-    unit: 'FT',
-    reference: 'AMSL'
+  return null;
+}
+
+/**
+ * Extract position ID from airspace info
+ */
+function extractPositionId(id, name) {
+  // Try to extract from ID (e.g., "YMMM/ADELAIDE" -> extract position code)
+  // For now, use a simple extraction - this may need refinement based on actual data
+
+  // Look for common position identifiers in the name
+  const nameUpper = (name || id || '').toUpperCase();
+
+  if (nameUpper.includes('CORAL')) return 'COL';
+  if (nameUpper.includes('FLINDERS')) return 'FLD';
+  if (nameUpper.includes('HOWE')) return 'HWE';
+  if (nameUpper.includes('TASMAN')) return 'TSN';
+  if (nameUpper.includes('INDIAN EAST')) return 'INE';
+  if (nameUpper.includes('INDIAN SOUTH')) return 'INS';
+  if (nameUpper.includes('INDIAN')) return 'IND';
+  if (nameUpper.includes('HONIARA')) return 'AGGG';
+  if (nameUpper.includes('NAURU')) return 'ANAU';
+
+  // Default: try to extract first 3-4 letter code
+  const codeMatch = nameUpper.match(/([A-Z]{3,4})/);
+  if (codeMatch) {
+    return codeMatch[1];
+  }
+
+  return null;
+}
+
+/**
+ * Extract location name from ICAO code
+ */
+function extractLocationName(icao) {
+  const locationMap = {
+    'YBBB': 'Brisbane',
+    'YBBO': 'Brisbane',
+    'YMMM': 'Melbourne',
+    'YMMO': 'Melbourne',
+    'YSSY': 'Sydney',
+    'YSSO': 'Sydney',
+    'YPAD': 'Adelaide',
+    'YPPH': 'Perth'
   };
+
+  return locationMap[icao] || icao;
 }
 
 /**
- * Normalize coordinate to decimal degrees
+ * Determine position prefix based on location and position
  */
-function normalizeCoordinate(coord) {
-  if (typeof coord === 'number') {
-    return parseFloat(coord.toFixed(6));
-  }
+function determinePositionPrefix(locations, posId) {
+  if (!locations || locations.length === 0) return posId;
 
-  const num = parseFloat(coord);
-  if (!isNaN(num)) {
-    return parseFloat(num.toFixed(6));
-  }
+  const location = locations[0];
 
-  return 0;
-}
-
-/**
- * Generate a unique ID
- */
-function generateId(prefix) {
-  const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).substring(2, 7);
-  return `${prefix}_${timestamp}_${random}`.toUpperCase();
-}
-
-/**
- * Validate VATGlasses data structure
- * @param {Object} data - VATGlasses data to validate
- * @returns {Object} Validation result
- */
-function validateVATGlassesData(data) {
-  const errors = [];
-  const warnings = [];
-
-  // Check required top-level properties
-  if (!data.airspace && !data.positions && !data.airports) {
-    errors.push('Data must contain at least one of: airspace, positions, or airports');
-  }
-
-  // Validate airspaces
-  if (data.airspace) {
-    if (!Array.isArray(data.airspace)) {
-      errors.push('airspace must be an array');
-    } else {
-      data.airspace.forEach((airspace, index) => {
-        if (!airspace.id) warnings.push(`Airspace at index ${index} missing id`);
-        if (!airspace.name) warnings.push(`Airspace at index ${index} missing name`);
-        if (!airspace.boundaries || airspace.boundaries.length === 0) {
-          warnings.push(`Airspace ${airspace.id || index} has no boundaries`);
-        }
-      });
-    }
-  }
-
-  // Validate positions
-  if (data.positions) {
-    if (!Array.isArray(data.positions)) {
-      errors.push('positions must be an array');
-    } else {
-      data.positions.forEach((position, index) => {
-        if (!position.callsign) warnings.push(`Position at index ${index} missing callsign`);
-        if (!position.frequency) warnings.push(`Position at index ${index} missing frequency`);
-      });
-    }
-  }
-
-  // Validate airports
-  if (data.airports) {
-    if (!Array.isArray(data.airports)) {
-      errors.push('airports must be an array');
-    } else {
-      data.airports.forEach((airport, index) => {
-        if (!airport.icao) warnings.push(`Airport at index ${index} missing ICAO code`);
-        if (!airport.coordinates) warnings.push(`Airport at index ${index} missing coordinates`);
-      });
-    }
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-    warnings
+  // Map location to prefix
+  const prefixMap = {
+    'YBBB': 'BN',
+    'YBBO': 'BN',
+    'YMMM': 'ML',
+    'YMMO': 'ML',
+    'YSSY': 'SY',
+    'YSSO': 'SY',
+    'YPAD': 'AD',
+    'YPPH': 'PH'
   };
+
+  const prefix = prefixMap[location] || location.substring(1, 3).toUpperCase();
+
+  return `${prefix}-${posId}`;
 }
 
 module.exports = {
-  convertToVATGlasses,
-  validateVATGlassesData
+  convertToVATGlasses
 };

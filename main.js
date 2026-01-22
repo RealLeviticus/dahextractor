@@ -6,6 +6,18 @@ const http = require('http');
 const { parseDAHFile } = require('./src/js/parser');
 const { convertToVATGlasses } = require('./src/js/converter');
 
+// Enable hot reload in development
+if (process.env.NODE_ENV === 'development') {
+  try {
+    require('electron-reload')(__dirname, {
+      electron: path.join(__dirname, 'node_modules', '.bin', 'electron'),
+      hardResetMethod: 'exit'
+    });
+  } catch (err) {
+    console.log('electron-reload not available');
+  }
+}
+
 let mainWindow;
 
 function createWindow() {
@@ -19,7 +31,8 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js')
+      preload: path.join(__dirname, 'preload.js'),
+      devTools: true
     }
   });
 
@@ -28,8 +41,9 @@ function createWindow() {
   // Maximize window on start
   mainWindow.maximize();
 
-  // Open DevTools in development
-  if (process.env.NODE_ENV === 'development') {
+  // Open DevTools in development (checking both NODE_ENV and command line arg)
+  const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--dev');
+  if (isDev) {
     mainWindow.webContents.openDevTools();
   }
 
@@ -71,11 +85,11 @@ ipcMain.handle('select-dah-file', async () => {
 // Handle file conversion
 ipcMain.handle('convert-dah-file', async (event, filePath) => {
   try {
-    // Read the file
-    const fileContent = await fs.readFile(filePath, 'utf-8');
+    // Read the file as buffer (for PDF support)
+    const fileContent = await fs.readFile(filePath);
 
-    // Parse the DAH file
-    const parsedData = parseDAHFile(fileContent);
+    // Parse the DAH file (now async)
+    const parsedData = await parseDAHFile(fileContent);
 
     // Convert to VATGlasses format
     const vatglassesData = convertToVATGlasses(parsedData);
