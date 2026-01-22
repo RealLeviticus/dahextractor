@@ -3,60 +3,101 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DAH to VATGlasses Converter</title>
-    <link rel="stylesheet" href="styles.css">
+    <title>DAH to JSON Converter - VATPAC</title>
+    <link rel="stylesheet" href="src/css/styles.css">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>DAH to VATGlasses Converter</h1>
-            <p class="subtitle">Extract airspace data from DAH files and convert to VATGlasses JSON format</p>
-        </header>
+    <header>
+        <div class="header-content">
+            <div class="logo-left">
+                <img id="vatpacLogo" src="assets/vatpac-logo-white.svg" alt="VATPAC Logo" class="vatpac-logo">
+            </div>
+            <div class="header-right">
+                <span class="app-title">DAH to JSON Converter</span>
+            </div>
+        </div>
+    </header>
 
-        <main>
-            <div class="section">
-                <h2>Step 1: Select DAH File</h2>
-                <div class="file-selector">
-                    <button id="selectFileBtn" class="btn btn-primary">Select DAH File</button>
-                    <div id="selectedFile" class="selected-file"></div>
-                </div>
+    <main>
+        <!-- Home Screen -->
+        <div id="homeScreen" class="screen active">
+            <div class="welcome-section">
+                <h2>Welcome</h2>
+                <p>Choose how you'd like to provide your DAH file:</p>
             </div>
 
-            <div class="section">
-                <h2>Step 2: Convert File</h2>
-                <button id="convertBtn" class="btn btn-success" disabled>Convert to VATGlasses JSON</button>
-                <div id="status" class="status"></div>
-            </div>
-
-            <div class="section" id="previewSection" style="display: none;">
-                <h2>Step 3: Preview & Save</h2>
-                <div class="preview-container">
-                    <pre id="jsonPreview"></pre>
+            <div class="option-cards">
+                <div class="option-card" id="uploadOption">
+                    <div class="option-icon">📁</div>
+                    <h3>Upload File</h3>
+                    <p>Select a DAH file from your computer</p>
+                    <button class="btn btn-primary">Choose File</button>
                 </div>
+
+                <div class="option-card" id="linkOption">
+                    <div class="option-icon">🔗</div>
+                    <h3>Provide Link</h3>
+                    <p>Enter a URL to download the DAH file</p>
+                    <button class="btn btn-primary">Enter URL</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Link Input Screen -->
+        <div id="linkScreen" class="screen">
+            <div class="section">
+                <h2>Enter DAH File URL</h2>
+                <div class="link-input-group">
+                    <input
+                        type="url"
+                        id="pdfUrlInput"
+                        class="url-input"
+                        placeholder="https://example.com/dah-file.pdf"
+                    >
+                    <div class="button-group">
+                        <button id="downloadBtn" class="btn btn-success">Download & Convert</button>
+                        <button id="cancelLinkBtn" class="btn btn-secondary">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Processing Screen -->
+        <div id="processingScreen" class="screen">
+            <div class="section processing-section">
+                <h2>Processing</h2>
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div id="progressFill" class="progress-fill"></div>
+                    </div>
+                    <p id="progressText" class="progress-text">Initializing...</p>
+                </div>
+                <div id="processingStatus" class="status-message"></div>
+            </div>
+        </div>
+
+        <!-- Complete Screen -->
+        <div id="completeScreen" class="screen">
+            <div class="section complete-section">
+                <div class="success-icon">✓</div>
+                <h2>Conversion Complete!</h2>
+                <p id="conversionSummary" class="summary-text"></p>
                 <div class="button-group">
-                    <button id="saveBtn" class="btn btn-success">Save JSON File</button>
-                    <button id="copyBtn" class="btn btn-secondary">Copy to Clipboard</button>
+                    <button id="saveLocationBtn" class="btn btn-success">Save JSON File</button>
+                    <button id="startOverBtn" class="btn btn-secondary">Convert Another</button>
                 </div>
             </div>
+        </div>
+    </main>
 
-            <div class="section info-section">
-                <h3>About DAH Files</h3>
-                <p>DAH (Designated Airspace Handbook) files contain airspace information from Air Services Australia including:</p>
-                <ul>
-                    <li>Airspace boundaries and volumes</li>
-                    <li>Upper and lower altitude limits</li>
-                    <li>Airspace identification and names</li>
-                    <li>Coordinate information (latitude/longitude)</li>
-                </ul>
-                <p>This tool extracts this data and converts it to the VATGlasses JSON format for use with VATGlasses applications.</p>
-            </div>
-        </main>
+    <footer>
+        <div class="disclaimer">
+            <span class="warning-icon">⚠️</span>
+            <strong>Simulation Use Only</strong> - Not for real-world aviation use. Always use official sources for flight planning and in-flight decisions.
+        </div>
+        <p class="footer-credits">DAH Extractor v1.0.0 | VATPAC | Data source: Air Services Australia</p>
+    </footer>
 
-        <footer>
-            <p>DAH Extractor v1.0.0 | Data source: Air Services Australia</p>
-        </footer>
-    </div>
-
-    <script src="renderer.js"></script>
+    <script src="src/js/renderer.js"></script>
 </body>
 </html>

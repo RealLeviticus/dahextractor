@@ -1,0 +1,475 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    height: 100%;
+    overflow: hidden;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    background: #1a2332;
+}
+
+/* Header - VATPAC Style */
+header {
+    background: #0d1520;
+    color: white;
+    padding: 15px 40px;
+    flex-shrink: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.header-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.logo-left {
+    display: flex;
+    align-items: center;
+}
+
+.vatpac-logo {
+    height: 50px;
+    width: auto;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.app-title {
+    font-size: 16px;
+    font-weight: 500;
+    color: #a0aec0;
+    white-space: nowrap;
+}
+
+/* Main Content - Dark Theme */
+main {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 50px 40px;
+    background: #1a2332;
+}
+
+/* Custom scrollbar */
+main::-webkit-scrollbar {
+    width: 10px;
+}
+
+main::-webkit-scrollbar-track {
+    background: #0d1520;
+}
+
+main::-webkit-scrollbar-thumb {
+    background: #2d3748;
+    border-radius: 5px;
+}
+
+main::-webkit-scrollbar-thumb:hover {
+    background: #4a5568;
+}
+
+/* Screen Management */
+.screen {
+    display: none;
+    animation: fadeIn 0.3s ease-in;
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+.screen.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Welcome Section */
+.welcome-section {
+    text-align: center;
+    margin-bottom: 60px;
+}
+
+.welcome-section h2 {
+    font-size: 36px;
+    color: #ffffff;
+    margin-bottom: 15px;
+    font-weight: 700;
+}
+
+.welcome-section p {
+    font-size: 18px;
+    color: #a0aec0;
+}
+
+/* Option Cards - VATPAC Style */
+.option-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 30px;
+    margin-top: 30px;
+}
+
+.option-card {
+    background: #0d1520;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 50px 40px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.option-card:hover {
+    border-color: #3b82f6;
+    transform: translateY(-5px);
+    box-shadow: 0 10px 30px rgba(59, 130, 246, 0.2);
+    background: #111927;
+}
+
+.option-icon {
+    font-size: 64px;
+    margin-bottom: 25px;
+    filter: grayscale(0.3);
+}
+
+.option-card h3 {
+    font-size: 24px;
+    color: #ffffff;
+    margin-bottom: 12px;
+    font-weight: 600;
+}
+
+.option-card p {
+    font-size: 15px;
+    color: #a0aec0;
+    margin-bottom: 30px;
+    line-height: 1.6;
+}
+
+/* Section Styles */
+.section {
+    background: #0d1520;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 50px;
+    max-width: 700px;
+    margin: 0 auto;
+}
+
+.section h2 {
+    font-size: 28px;
+    margin-bottom: 30px;
+    color: #ffffff;
+    font-weight: 700;
+    text-align: center;
+}
+
+/* Link Input */
+.link-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+}
+
+.url-input {
+    padding: 16px 20px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    font-size: 16px;
+    transition: all 0.2s ease;
+    width: 100%;
+    background: #1a2332;
+    color: #ffffff;
+}
+
+.url-input:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.url-input::placeholder {
+    color: #718096;
+}
+
+/* Progress Bar */
+.progress-container {
+    margin: 40px 0;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 40px;
+    background: #1a2332;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
+    transition: width 0.3s ease;
+    width: 0%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 600;
+    font-size: 15px;
+}
+
+.progress-text {
+    text-align: center;
+    color: #a0aec0;
+    font-size: 17px;
+    font-weight: 500;
+}
+
+.status-message {
+    margin-top: 25px;
+    padding: 18px;
+    border-radius: 8px;
+    font-size: 15px;
+    text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.status-message.info {
+    background: rgba(59, 130, 246, 0.1);
+    color: #93c5fd;
+    border-color: rgba(59, 130, 246, 0.3);
+}
+
+.status-message.error {
+    background: rgba(239, 68, 68, 0.1);
+    color: #fca5a5;
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+/* Processing Section */
+.processing-section {
+    text-align: center;
+    min-height: 300px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+/* Complete Section */
+.complete-section {
+    text-align: center;
+    padding: 50px 40px;
+}
+
+.success-icon {
+    width: 100px;
+    height: 100px;
+    background: #10b981;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 60px;
+    margin: 0 auto 30px;
+    animation: scaleIn 0.5s ease;
+}
+
+@keyframes scaleIn {
+    from {
+        transform: scale(0);
+    }
+    to {
+        transform: scale(1);
+    }
+}
+
+.summary-text {
+    font-size: 17px;
+    color: #a0aec0;
+    margin-bottom: 40px;
+    line-height: 1.8;
+    white-space: pre-line;
+}
+
+/* Buttons - VATPAC Style */
+.btn {
+    padding: 14px 32px;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: center;
+}
+
+.btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-primary {
+    background: #0d1520;
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: #111927;
+    border-color: #3b82f6;
+}
+
+.btn-success {
+    background: #3b82f6;
+    color: white;
+}
+
+.btn-success:hover:not(:disabled) {
+    background: #2563eb;
+}
+
+.btn-secondary {
+    background: #374151;
+    color: white;
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background: #4b5563;
+}
+
+.button-group {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+/* Footer - VATPAC Style */
+footer {
+    background: #0d1520;
+    padding: 25px 40px;
+    text-align: center;
+    flex-shrink: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.disclaimer {
+    background: rgba(251, 191, 36, 0.1);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    border-radius: 8px;
+    padding: 15px 20px;
+    margin-bottom: 15px;
+    color: #fbbf24;
+    font-size: 13px;
+    line-height: 1.6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.warning-icon {
+    font-size: 18px;
+}
+
+.disclaimer strong {
+    color: #fcd34d;
+}
+
+.footer-credits {
+    color: #6b7280;
+    font-size: 12px;
+    margin: 0;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    main {
+        padding: 30px 20px;
+    }
+
+    .option-cards {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+
+    .section {
+        padding: 35px 25px;
+    }
+
+    header {
+        padding: 15px 20px;
+    }
+
+    .header-content {
+        flex-direction: row;
+        justify-content: space-between;
+    }
+
+    .vatpac-logo {
+        height: 40px;
+    }
+
+    .app-title {
+        font-size: 13px;
+    }
+
+    .welcome-section h2 {
+        font-size: 28px;
+    }
+
+    .option-card {
+        padding: 40px 30px;
+    }
+
+    .button-group {
+        flex-direction: column;
+    }
+
+    .btn {
+        width: 100%;
+    }
+}
+
+@media (min-width: 1400px) {
+    .screen {
+        max-width: 1300px;
+    }
+
+    .option-cards {
+        gap: 40px;
+    }
+}

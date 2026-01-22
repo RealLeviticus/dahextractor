@@ -1,23 +1,32 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
-const { parseDAHFile } = require('./parser');
-const { convertToVATGlasses } = require('./converter');
+const https = require('https');
+const http = require('http');
+const { parseDAHFile } = require('./src/js/parser');
+const { convertToVATGlasses } = require('./src/js/converter');
 
 let mainWindow;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 900,
-    height: 700,
+    width: 1200,
+    height: 800,
+    minWidth: 800,
+    minHeight: 600,
+    autoHideMenuBar: true,
+    icon: path.join(__dirname, 'build', 'icon.png'),
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false
-    },
-    icon: path.join(__dirname, 'assets/icon.png')
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
+    }
   });
 
   mainWindow.loadFile('index.html');
+
+  // Maximize window on start
+  mainWindow.maximize();
 
   // Open DevTools in development
   if (process.env.NODE_ENV === 'development') {
@@ -81,6 +90,58 @@ ipcMain.handle('convert-dah-file', async (event, filePath) => {
       error: error.message
     };
   }
+});
+
+// Handle PDF download from URL
+ipcMain.handle('download-pdf', async (event, url) => {
+  return new Promise((resolve, reject) => {
+    const protocol = url.startsWith('https') ? https : http;
+    const tempPath = path.join(app.getPath('temp'), `dah-download-${Date.now()}.pdf`);
+    const file = require('fs').createWriteStream(tempPath);
+
+    const request = protocol.get(url, (response) => {
+      // Handle redirects
+      if (response.statusCode === 301 || response.statusCode === 302) {
+        file.close();
+        require('fs').unlinkSync(tempPath);
+        return resolve(ipcMain.handle('download-pdf', event, response.headers.location));
+      }
+
+      if (response.statusCode !== 200) {
+        file.close();
+        require('fs').unlinkSync(tempPath);
+        return reject(new Error(`Failed to download: HTTP ${response.statusCode}`));
+      }
+
+      const totalBytes = parseInt(response.headers['content-length'], 10);
+      let downloadedBytes = 0;
+
+      response.on('data', (chunk) => {
+        downloadedBytes += chunk.length;
+        const progress = totalBytes ? Math.round((downloadedBytes / totalBytes) * 100) : 0;
+        mainWindow.webContents.send('download-progress', progress);
+      });
+
+      response.pipe(file);
+
+      file.on('finish', () => {
+        file.close();
+        resolve({ success: true, filePath: tempPath });
+      });
+
+      file.on('error', (err) => {
+        file.close();
+        require('fs').unlinkSync(tempPath);
+        reject(err);
+      });
+    });
+
+    request.on('error', (err) => {
+      file.close();
+      require('fs').unlinkSync(tempPath);
+      reject(err);
+    });
+  });
 });
 
 // Handle saving converted file

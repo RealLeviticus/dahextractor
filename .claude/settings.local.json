@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(test:*)",
+      "Bash(node create-icons.js:*)",
+      "Bash(npm install)",
+      "Bash(npm run build:win:*)",
+      "Bash(where convert magick:*)",
+      "Bash(npm install:*)",
+      "Bash(node create-app-icon.js:*)",
+      "Bash(node convert-icon.js:*)"
+    ]
+  }
+}
