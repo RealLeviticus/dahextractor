@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DAH to VATGlasses Converter</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>DAH to VATGlasses Converter</h1>
+            <p class="subtitle">Extract airspace data from DAH files and convert to VATGlasses JSON format</p>
+        </header>
+
+        <main>
+            <div class="section">
+                <h2>Step 1: Select DAH File</h2>
+                <div class="file-selector">
+                    <button id="selectFileBtn" class="btn btn-primary">Select DAH File</button>
+                    <div id="selectedFile" class="selected-file"></div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Step 2: Convert File</h2>
+                <button id="convertBtn" class="btn btn-success" disabled>Convert to VATGlasses JSON</button>
+                <div id="status" class="status"></div>
+            </div>
+
+            <div class="section" id="previewSection" style="display: none;">
+                <h2>Step 3: Preview & Save</h2>
+                <div class="preview-container">
+                    <pre id="jsonPreview"></pre>
+                </div>
+                <div class="button-group">
+                    <button id="saveBtn" class="btn btn-success">Save JSON File</button>
+                    <button id="copyBtn" class="btn btn-secondary">Copy to Clipboard</button>
+                </div>
+            </div>
+
+            <div class="section info-section">
+                <h3>About DAH Files</h3>
+                <p>DAH (Designated Airspace Handbook) files contain airspace information from Air Services Australia including:</p>
+                <ul>
+                    <li>Airspace boundaries and volumes</li>
+                    <li>Upper and lower altitude limits</li>
+                    <li>Airspace identification and names</li>
+                    <li>Coordinate information (latitude/longitude)</li>
+                </ul>
+                <p>This tool extracts this data and converts it to the VATGlasses JSON format for use with VATGlasses applications.</p>
+            </div>
+        </main>
+
+        <footer>
+            <p>DAH Extractor v1.0.0 | Data source: Air Services Australia</p>
+        </footer>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>
